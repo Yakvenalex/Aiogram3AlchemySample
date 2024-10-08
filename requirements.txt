@@ -1,0 +1,6 @@
+aiogram
+alembic
+pydantic_settings
+sqlalchemy
+loguru
+aiosqlite
