@@ -2,6 +2,8 @@ from aiogram.filters import CommandObject, CommandStart
 from loguru import logger
 from aiogram.types import Message
 from aiogram.dispatcher.router import Router
+
+from bot.database import connection
 from bot.users.dao import UserDAO
 from bot.users.utils import get_refer_id_or_none
 
@@ -9,10 +11,11 @@ user_router = Router()
 
 
 @user_router.message(CommandStart())
-async def cmd_start(message: Message, command: CommandObject):
+@connection
+async def cmd_start(message: Message, command: CommandObject, session, **kwargs):
     try:
         user_id = message.from_user.id
-        user_info = await UserDAO.find_one_or_none(telegram_id=user_id)
+        user_info = await UserDAO.find_one_or_none(session=session, telegram_id=user_id)
 
         if user_info:
             await message.answer(f"👋 Привет, {message.from_user.full_name}! Выберите необходимое действие")
@@ -22,6 +25,7 @@ async def cmd_start(message: Message, command: CommandObject):
         ref_id = get_refer_id_or_none(command_args=command.args, user_id=user_id)
         # Добавление нового пользователя
         await UserDAO.add(
+            session=session,
             telegram_id=user_id,
             username=message.from_user.username,
             first_name=message.from_user.first_name,
