@@ -1,6 +1,8 @@
 from datetime import datetime
+from functools import wraps
+
 from bot.config import database_url
-from sqlalchemy import func, TIMESTAMP, Integer
+from sqlalchemy import func, TIMESTAMP, Integer, text
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine, AsyncSession
 
@@ -8,19 +10,27 @@ engine = create_async_engine(url=database_url)
 async_session_maker = async_sessionmaker(engine, class_=AsyncSession)
 
 
-def connection(method):
-    async def wrapper(*args, **kwargs):
-        async with async_session_maker() as session:
-            try:
-                # Явно не открываем транзакции, так как они уже есть в контексте
-                return await method(*args, session=session, **kwargs)
-            except Exception as e:
-                await session.rollback()  # Откатываем сессию при ошибке
-                raise e  # Поднимаем исключение дальше
-            finally:
-                await session.close()  # Закрываем сессию
+def connection(isolation_level=None):
+    def decorator(method):
+        @wraps(method)
+        async def wrapper(*args, **kwargs):
+            async with async_session_maker() as session:
+                try:
+                    # Устанавливаем уровень изоляции, если передан
+                    if isolation_level:
+                        await session.execute(text(f"SET TRANSACTION ISOLATION LEVEL {isolation_level}"))
 
-    return wrapper
+                    # Выполняем декорированный метод
+                    return await method(*args, session=session, **kwargs)
+                except Exception as e:
+                    await session.rollback()  # Откатываем сессию при ошибке
+                    raise e  # Поднимаем исключение дальше
+                finally:
+                    await session.close()  # Закрываем сессию
+
+        return wrapper
+
+    return decorator
 
 
 class Base(AsyncAttrs, DeclarativeBase):
